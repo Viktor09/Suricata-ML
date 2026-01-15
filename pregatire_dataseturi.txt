@@ -1,0 +1,218 @@
+victim1 - 192.168.2.165
+victim2 - 192.168.2.69
+victim3 - 192.168.2.95
+admin - 192.168.2.226
+
+ID, TRAIN (Ce învață modelul), TEST (Validare pe date nevăzute)
+A | Normal Traffic done | Active Streaming done
+B | High Load done | Active Browsing done
+C | nmap scanning done | ghost traffic done
+D | vrrp done | ip aliasing done
+E | cache refresh | dhcp renewal
+
+
+ID, TRAIN (Ce învață modelul), TEST (Validare pe date nevăzute)
+A | 1v1 Silent | 1v2 Simultan
+B | 1v1 Noisy | 1v3 Noisy
+C | 1v2 Secvential | 1v3 Silent
+D | 2V2 Coordonat | 2v1 Conflict
+
+
+Normal cases (Label 0)
+
+I. Trafic normal
+
+- In acest scenariul am simulat comportamentul de navigare web prin 3 victime de pe infrastructura mea locala. Acest proces implica interogarea unui server DNS pentru rezolutia numelor de domenii si cereri HTTP pentru descarcarea continutului. Ca modelul meu sa nu invete un tipar anume, am bagat un sleep care ia o valoare random in functie de iteratie pentru a difersifica modelul.
+
+#!/bin/bash
+
+echo "Starting normal traffic on Victim1"
+
+while true; do
+      nslookup google.com > /dev/null 2>&1
+      
+      wget -q -O - http://google.com > /dev/null 2>&1
+
+      SLEEP_TIME=$(awk 'BEGIN{srand(); print int(rand()*8)+2}')
+      
+      sleep $SLEEP_TIME
+done
+
+echo "Normal traffic started on Victim1"
+
+II. Active Streaming
+
+- Aici simulez mai exact cum as vizualiza un video de inalta calitate sau cum descarc un fisier mai mare. Se introduce un trafic masiv pe retea din aceasta cauza si modelul trebuie sa invete ca un burst de pachete intr-un interval scurt nu semnifica neaparat un atac, poate proveni si dintr-un caz legitm. Pentru asta am folosit iperf pe masina virtuala Admin, ce are rol de mentenanta si de orchestrare, simuland sursa de continut. Pe Victima1 am simulat clientul, generand un flux continuu de date la capacitate maxima a benzii.
+
+Admin:
+iperf3 -s
+
+Victim1:
+iperf3 -c 192.168.2.226 -u -b 50M -t 600 -R
+
+III. High Load
+
+- Scenariul consta in incararea retelei, nu chiar ca in cazul la active stream, ci printr-un script care are un numar mare ridicat de conexiuni simultane si o rata mare a pachetelor. Am rulat pe toate cele 3 victime, scriptul de mai jos:
+
+#!/bin/bash
+
+echo "Starting high load on Victim1"
+
+ping -i 0.5 192.168.2.1 > /dev/null 2>&1 &
+ping -i 0.5 192.168.2.69 > /dev/null 2>&1 &
+ping -i 0.5 192.168.2.95 > /dev/null 2>&1 &
+
+for i in $(seq 1 3); do
+    while true; do
+        curl -s https://github.com > /dev/null 2>&1
+        curl -s https://google.com > /dev/null 2>&1
+        curl -s https://stackoverflow.com/questions > /dev/null 2>&1
+        sleep 1
+    done &
+done
+
+while true; do
+      wget --no-check-certificate --no-check-certificate -q -O /dev/null https://speed.hetzner.de/1MB.bin
+      sleep 10
+done &
+
+echo "High load started on Victim1"
+
+
+IV. Active browsing
+
+- Este un scenariu mediu de generare de trafic normal, adica nici intens in cazul high load, dar nici foarte scazut, in cazul normal traffic. 
+
+#!/bin/bash
+
+echo "Starting Active Browsing on Victim2"
+
+urls="http://google.com http://github.com http://stackoverflow.com http://wikipedia.org http://yahoo.com http://bing.com http://amazon.com http://reddit.com"
+
+while true; do
+
+    target=$(echo $urls | awk '{srand(); print $(int(rand()*8)+1)}')
+     
+    wget -q -T 5 -O /dev/null "$target"
+     
+    sleep_time=$(awk 'BEGIN{srand(); print int(rand()*12)+3}')
+
+    sleep $sleep_time
+
+done
+
+echo "Active Browsing started on Victim2"
+
+V. Nmap Scanning     
+
+- Simuleaza comportamentul standard al unui administrator de retea pentru a vedea ce dispozitive sunt disponibile, pentru a nu se confunda cu brute force-ul de scanari pe retea in cazul atacului de tip arp spoofing. Se ruleaza de pe admin urmatoarea comanda:
+
+#!/bin/bash
+
+echo "Starting Network Scanning"
+
+for i in $(seq 1 3); do
+    nmap -sn -PR -n 192.168.2.0/24 > /dev/null
+    
+    SLEEP_TIME=$((240 + RANDOM % 120))
+
+    sleep $SLEEP_TIME
+done
+
+echo "Network Scanning Started"
+
+VI. Ghost Scanning
+
+- Tot simuleaza comportamentul de scanning, doar ca e pentru ip-urile care nu au alocate un device, adica simuleaza faptul ca nu raspunde nimeni si reprezinta comportamentul de timeout, nu tot cel de atac.
+
+#!/bin/bash
+
+SUBNET="192.168.2"
+
+echo "Starting Ghost Scanning"
+
+while true; do
+     fping -g 192.168.2.200 192.168.2.250 -r 0 -q
+     sleep 240
+done
+
+echo "Ghost Scanning Started"
+
+VII. VRRP
+
+- Acest caz are la baza 2 routere, unul master si unul de backup. Ideea e ca se genereaza niste gratuitous arps atunci cand un router pica si celalalt vine si ii ia locul si se poate confunda cu atacul principal. Acest scenariu a fost gandit in felul urmator: Se captureaza trafic normala pana la minutul 5, unde victimele fac niste cereri de DNS, apoi o sa pice routerul principal si o sa ii ia locul cel secundar, dupa care o sa isi revina masterul, iar apoi o sa se faca flapping pt 2 minute, urmata de stabilizarea finala.
+
+#!/bin/bash
+
+VM="Router1"
+NET_NAME="virbr-labs"
+
+echo "Starting VRRP Scenario"
+SECONDS=0
+
+echo "[Minute 0] Normal traffic starts now!"
+sleep 300
+
+echo "[Minute 10] Failover"
+virsh destroy $VM
+sleep 240
+
+echo "[Minute 14] Failback"
+virsh start $VM
+echo "Waiting for Master to boot!"
+sleep 240
+
+CURRENT_IFACE=$(virsh domiflist $VM | grep "$NET_NAME" | awk '{print $1}')
+
+echo "[Minute 18] Flapping"
+END_TIME=$((SECONDS + 480))
+
+while [ $SECONDS -lt $END_TIME ]; do
+    echo "Link Down"
+    virsh domif-setlink $VM $CURRENT_IFACE down
+    sleep $((2 + RANDOM % 3))
+
+    echo "Link Up"
+    virsh domif-setlink $VM $CURRENT_IFACE up
+    sleep $((6 + RANDOM % 5))
+done
+
+echo "[Minute 26] Stop Flapping"
+virsh domif-setlink $VM $CURRENT_IFACE up
+virsh start $VM 2>/dev/null
+sleep 240
+
+echo "[Minute 30] STOP!"
+
+
+VIII. IP Aliasing
+
+- Are rolul de a evidentia fals pozitivul in care dispozitivele raspund legitim la multiple adresa IP, folosind o singura adresa MAC, are legatura cu metricile pregatite pentru modelul de ML.
+
+Victim2:
+
+ip addr add 192.168.2.70/24 dev eth0
+ip addr add 192.168.2.71/24 dev eth0
+
+Victim3:
+
+ip addr add 192.168.2.96/24 dev eth0
+ip addr add 192.168.2.97/24 dev eth0
+
+Admin:
+#!/bin/bash
+
+while true; do
+    ping -c 1 -W 1 192.168.2.69 > /dev/null 2>&1
+    ping -c 1 -W 1 192.168.2.70 > /dev/null 2>&1
+    ping -c 1 -W 1 192.168.2.71 > /dev/null 2>&1
+
+    ping -c 1 -W 1 192.168.2.95 > /dev/null 2>&1
+    ping -c 1 -W 1 192.168.2.96 > /dev/null 2>&1
+    ping -c 1 -W 1 192.168.2.97 > /dev/null 2>&1
+
+    sleep 2
+done
+
+
+
