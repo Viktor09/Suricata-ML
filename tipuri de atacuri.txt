@@ -1,0 +1,172 @@
+Layer 2 network attacks
+
+i) ARP Spoofing/ARP Poisoning
+- este un tip de atac MITM, deoarece ARP-ul nu are autentificare.
+
+- protocolul ARP translateaza adresele IP in adrese MAC pentru ca dispozitivele din reteaua locala sa poata comunica. Se face broadcast catre toate dispozitivele de pe dispozitivul dorit si asa este primita adresa MAC a dispozitivului cu care vreau sa comunic (ARP REQUEST broadcast + ARP RESPONSE unicast).
+
+- modul de functionare al atacului este in felul urmator: atacatorul trimite ARP Replay-uri false catre victima si/sau router, dupa care victima isi actualizeaza arp cache-ul cu MAC-ul atacatorului pt IP-ul routerului, router-ul isi actualizeaza arp cache-ul cu MAC-ul atacatorului pentru IP-ul victimei, tot traficul intre victima si gateway trece prin atacator
+
+- simptome si indicatori intr-o retea compromisa: duplicari de adrese IP, mesaje ARP neobisnuit de des, intrari ARP se schimba brusc, gateway-ul devine inaccesibil. 
+
+- din dataset am coloanele urmatoare: M=arp.hw.size, O=franme.ignored, Q=frame.marked, W=etg.ig, Y=frame.cap_len, Z=frame.encap_type, AA=frame.len, AE=arp.proto.size, AF=eth.lg, AJ=arp.opcode, AL=eth.type, AP=frame.time_delta, AX=label.
+
+
+ii) DHCP Starvation
+- DHCP Starvation consta in consumarea tuturor adreselor IP disponbiledin DHCP Poo, sunt trimise ii de DHC DISCOVER/REQUEST cu MAC random inventat,  
+
+- DHCP procesul prin care unui device ii este atribuit automat o adresa IP, masca, gateway si dns. Acesta functioneaza in 4 pasi: DHCP Discover (descopera cine e server DHCP in retea si vrea o adresa IP), DHCP offer (server-ul ofera IP-ul cerut), DHCP Request (clientul spune ca vrea IP-ul respectiv), DHCP ACK (serveru confirma treaba asta).
+
+- din dataset am coloanele urmatoare: ip.len, dhcp.option.type, udp.length, ip.dsfield.dscp, frame.ignored, ip.ttl, frame.marked, dhcp.option.dhcp dhcp.hw.len, eth.ig, ip.proto, frame.cap_len, frame.encap_type, frame.len, dhcp.option.end, udp.srcport, eth.lg, dhcp.hw.type, dhcp.type, eth.type, udp.dstport, frame.time_delta, ip.hdr_len, dhcp.option.length
+
+
+iii) Rogue DHCP
+- atacatorul porneste un server DHCP fals in retea si are ca scop sa dea gateway fals, DNS fals sisa faca MITM pe toata reteaua.
+
+- semnaturi: 2 servere care raspund la acelasi discover; DHCP offer cu valori neobisnuite: gateway ciudat, lease time foarte mic/mare, DNS non-standard, subnet mask nepotrivit; rtt/delays neobisnuit de mici
+
+- din dataset am coloanele urmatoare: A=ip.len, I=dhcp.option.type, J=udp.length, N=ip.dsfield.dscp, O=frame.ignored, P=ip.ttl, Q=frame.marked, T=dhcp.option.dhcp, U=dhcp.hw.len, W=eth.ig, X=ip.proto, Y=frame.cap_len, Z=frame.encap_type, AA=frame.len, AB=dhcp.option.end, AD=udp.srcport, AF=eth.lg, AG=dhcp.hw.type, AH=dhcp.type, AL=eth.type, AO=udp.dstport, AP=frame.time_delta, AS=ip.hdr_len, AV=dhcp.option.length, AX=label
+
+
+iv) MAC Flooding
+
+- atac asupra switch-urilor prin care atacatorul umple tabela CAM cu mii de adrese MAC false
+
+- atacatorul trimite frame-uri etherenet cu MAC random, nu conteaza protocolul folosit
+
+- cand switch-ul nu mai poate decide catre ce port tb sa trimita un frame unicast trece in FAIL-OPEN
+
+- din dataset am coloanele urmatoare: A=ip.len, N=ip.dsfield.dscp, O=frame.ignored, P=ip.ttl, Q=frame.marked, W=eth.ig, X=ip.proto, Y=frame.cap_len, Z=frame.encap_type, AA=frame.len, AF=eth.lg, AL=eth.type, AP=frame.time_delta, AS=ip.hdr_len, AX=label
+
+OBSERVATII!
+
+O sa imi iau ca referinta dataset-ul pe care l-am gasit, o sa incerc sa mai modific pe ici pe colo din el in functie si de mediul meu, atacurile de referinta raman relevante in continuare + sa vedem ce model se potriveste cel mai bine pentru atacurile astea. (CEA MAI GREA PARTE MI SE PARE)
+
+Ar trebui sa mai caut per fiecare atac ce atribute din pcap sunt relevante, astfel sa vad ce pot aduce extrage, ce pot fura de la restul data seturilor, ar trebui si niste date pe mediul meu de testare, asta e principalul task acum.
+
+Acum ca am inteles ce se intampla, trebuie sa vad ce metrici sunt relevante pentru a antrena un model (asta trebuie sa caut joi)
+
+Trebuie sa ma mai joc in laborator sa vad cum arata rezultatele si cum e analizat traficul
+
+
+Layer 3-7 network attacks
+- DDoS attacks (Distributed Denial-of-Service): SYN flood, UDP flood, DNS amplification, QUIC amplification, etc.
+- Port scanning: TCP SYN scan, UDP scan, TCP Connect scan, Ping sweep, FIN/NULL/XMAS
+- External Brute-Force (SSH, FTP, HTTP, credential stuffing/password spraying)
+- Web Application Attacks (SQLi, XSS, LFI, RFI, Path Traversal): 
+- Malware C2 / Beaconing
+- DNS tunneling
+
+Aici exista o gramada de modele, nu ar trebui sa fie probleme, gasesc eu ceva agregat cu atacurile de mai sus si fine-tunnez 
+
+Obiective!
+
+- explorare modele de detectie nivel 2 si nivel 3. cu ce ajuta ar ajuta fiecare, adica de ce fac asta, cred ca este intrebarea?
+- dubii la layer 2 model pe care il construiesc de la 0, adevarat pentru ca datasetul pe care l-am gasit este destul de vag, chiar daca cuprinde atacurile pe care mi le-am propus, plus trebuie sa vad exact ce atribute mai adaug la dataset si cum pliez pe mediul meu, adica intraretea pe scurt.
+- pe celalalt layer 3-7 100% exista deja modele existente si doar fine-tunnez
+
+
+Principalul motiv pentru care am ales integrarea si detectarea atacurilor de nivel 2 este faptul ca aceste atacuri nu sunt observabile indeajuns pentru un IDS care functioneaza pe nivelurile superioare ale stivei OSI. Atacuri precum ARP Spoofing, DHCP Starvation, Rougue DHCP sau MAC Flooding sunt strict legate de reteaua locala si nu se reflecta in traficul IP sau TCP/UDP.
+
+Nivelurile 3-7 presupun atacuri pe partea de transport, porturi sau aplicatie, unde detectarea poate fi facuta eficient prin semnaturi. In schimb, atacurile de nivel 2 pot fi detectate doar prin comportamentul cadrelor Ethernet si a protocoalelor locale, care nu sunt vizibile la nivel IP.
+
+Un modul ML dedicat pentru Layer 2 ofera o vizibilitate mai mare sistemului si permite detectarea atacurilor interne de tip MITM, care ar trece neobservate.
+
+
+Extragere atribute pentru modulul de ML pentru Layer 2
+
+- din articolul (Explainable AI supported hybrid deep learnig method for layer 2 intrusion detection) pe care l-am vazut, la antrenarea modelului s-au folosit urmatorii algoritmi: CNN + Bi-LSTM Model si pentru Validitate si Explicarea rezultatelor SHAP Explainer (XAI).
+-  K-Nearest Neighbors (KNN), Isolation Forest, CNN, LSTM, Random Forest (Detecting and Preventing ARP Spoofing Attacks Using Real-Time Data Analysis and Machine Learning), SVM
+- (Intelligent ARP Spoofing Detection using Multi-layered Machine Learning Techniques for IoT Networks) aici am scopul de a vedea ce metrici pot sa deriv sa am un dataset cat mai compact.
+
+
+ARP Spoofing:
+
+a) STRUCTURA ARP:
+
+ETHERNET: eth.dst (de obicei broadcast MAC ff:ff:ff:ff:ff:ff), eth.src (MAC sursa), eth.type = 0x0806
++
+Header ARP: hw_type = 1, proto_type = 0x0800, hw_size = 6, proto_size = 4, opcode = 1/2 (request/replay)
++
+ARP Body: sender_mac, sender_ip, target_mac, target_ip
+
+b) Metrici pentru ARP Spoofing folosite in modelele existente de machine learning:
+
+CL2-IDS-data_set:
+arp.hw.size=6, franme.ignore=0, frame.marked=0, etg.ig=0, frame.cap_len=60/42, frame.encap_type=1, frame.len=60/42, arp.proto.size=4, eth.lg=0, arp.opcode=2, eth.type=0x0806, frame.time_delta-0.7214, label = ARPspoof.
+
+https://www.kaggle.com/datasets/omniaelghazoly/large-scale-network-cyberattacks-multiclass-2024:
+no, time, source, dest, protocol, length, info, frame_no, frame_length, frame time,
+
+Mai bun mi se pare al doilea, am si analiza normala de trafic si din caracteristicile astea pot sa generalizez altele, adica mi se pare perfect + scalabil pentru augmentare.
+
+c) Ce metrici mai pot adauga pe baza a ce am + augmentarea pe topologia mea interna cu 10-20%
+
+2507.21087v1.pdf articolul asta sugereaza niste formule pe baza a ceea ce cunoastem din dataset
+
+- inconsistenta IP-MAC, daca un IP are doar un MAC e ok, raport 0, daca nu raportul creste spre 1
+- voltatilitate, cat de des un IP trimite arp intr-un timp foarte scurt
+- consistenta MAC-IP al hostului, pentru fiecare nod/host se calculeaza cate perechi MAC-IP diferite are, raportat la numarul total de apariti
+- H, ARP suspect (gratuitous / replay fara cerere), flag 0 sau 1, caut request + replay apropiat daca nu e inseamna ca e suspect
+
+
+DHCP Starvation
+
+a) Structura DHCP
+
+Ethernet:eth.dst (de obicei broadcast MAC ff:ff:ff:ff:ff:ff), eth.src (MAC sursa), eth.type = 0x0800
+IP: la inceput nu are ip real, serverul foloseste ip.src= ip server dhcp, ip.dst ip-ul oferit clientului
+UDP: port 67 - server, 68 - client
+DHCP HEADER: op=1/2 (boot request/ boot replay), htype=1, hlen=6, xid= transaction id, ciaddr, yiaddr, chaddr, message type
+
+b) Aici nu am gasit dataset, o sa trebuiasca sa generez eu doua tipuri de date: normal si attack
+
+- traficul normal consta in cereri constante: 3-5 client dhcp reali, rulez comanda pt asignare periodic, MAC-urile sunt fixe, XID nu se schimba haotic, rate mici de pachete dhcp
+
+- traficul de atac o sa foloseasca un script care face mii de discover, cu mac-uri random, XID-uri random, flood intr un timp foarte mic.
+
+
+c) Ce metrici mai pot adauga pe baza a ce am + augmentarea pe topologia mea interna cu 10-20%
+
+numarul de mesaje de tipul DHCPDiscover intr-un timp delta
+numarul de mesaje de tipul DHCPRequest intr-un timp detla
+numarul de mesaje de tipul DHCPDecline intr-un timp delta
+Numarul de ARP Probe requests cu sursa ip-ului 0.0.0.0 intr-un timp delta
+Entropie (cat de multe nereguli sunt pe setul de date) pe XID, MAC
+
+
+MAC Flooding
+
+- aici am gasit dataset si e analog la ce e mai sus.
+
+
+TODO Data viitoare 5 decembrie ora 12
+
+1. antrenarea pt layer 2 pe baza a ceea ce am gasit + documentatie
+
+Next steps
+1. integrare suricata cu modul de ML
+2. integrare DRE 
+3. integrare modul Layer 3
+4. trimitere alerte, loguri
+5. automatizare
+6. integrarea cu MISP
+
+
+trimite invite
+sumarizare meeting azi si sa-l pun pe canalul de teams
+scop proiect + to-do-uri
+document 25 noiembrie
+
+
+
+
+sa ma uit ca se dau fals pozitive si in cazul in care se dau ping-uri in neant fara raspuns,adica unele victime sunt pe off
+
+
+
+
+
+
+
+

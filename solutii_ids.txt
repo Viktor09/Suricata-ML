@@ -1,0 +1,169 @@
+Active attack
+- se intampla atunci cand atacatorul interactioneaza activ cu sistemul sau reteaua tinta pentru a modifica, perturba sau obtine acces neautorizat la resurse
+- exemple: malware, penetrarea sistemelor, MITM, ARP spoofing, DNS spoofing, DoS/DDoS
+
+Passive attack
+- are loc atunci cand atacatorul nu interactioneaza direct cu sistemul, ci intercepteaza, monitorizeaza sau analizeaza traficul de retea pentru a obtine informatii confidentiale.
+- exemple: sniffing de pachete, traffic analysis, keylogging
+
+Security Information and Event Management (SIEM)
+
+- este o platforma care colecteaza, coreleaza si analizeaza logurile si alertele de securitate provenite din mai multe surse (IDS, fiewall-uri, servere).
+- are ca scop identificarea unor tipare complexe de atac si filtrarea alarmelor false.
+
+
+Intrusion Detection System
+
+- e un mecanism de securitate care are rolul de a monitoriza si analiza traficul de retea sau activitatea sistemelor informatice pentru a identifica incercari de acces neautorizat, activitati malitioase sau incalcari ale politicilor de securitate. Aceste activitati ori sunt raportate la un administrator ori sunt colectate folosind un SIEM system intr-un mod centralizat.
+
+Metode de detectie IDS
+
+1. Anomaly Recognition
+
+- invata comportamentul normal al unui sistem, iar apoi semnaleaza orice deviatie de la acel comportament ca posibil atac.
+- avantaje: detecteaza atacuri zero-day, poate recunoaste insider attacks, se adapteaza la mediul real daca e antrenat corect
+- dezavantaje: se poate schimba natural comportamentul sistemului, asa ca o sa genereze fals pozitive; necesita perioada mare de antrenare
+
+Metode de invatare in Anomaly Detection
+
+a) Supervised learning (anomaliile sunt rare, iar etichetarea poate fi dificila)
+b) Unsupervised learning (poate genera multe fals pozitive daca presupunerea e gresita)
+c) Semi-supervised learning (model antrenat doar pe date normale, orice abatere e considerata anomalie)
+d) Protocol Anomaly Detection (verifica daca traficul respecta standardele protocolului, orice abatere, la fel e considerata anomalie)
+
+2. Missue Recognition/Signature based
+
+- detecteaza atacuri cunoscute, comparand traficul sau activitatile din sistem cu o baza de date de pattern-uri de atacuri.
+- avantaje: foarte precis pentru atacurile cunoscute, usor de interpretat, usor de actualizat
+- dezavantaje: nu poate detecta atacuri zero-day, necesita actualizare constanta a semnaturilor
+
+Tehnici de implementare IDS
+
+1. Host Based IDS
+
+- instalata pe end-pointuri, servere sau baze de date
+- monitorizeaza activitatea interna a sistemului
+- detecteaza atacuri dupa ce intrusul a patruns deja in sistem
+
+2. Network-Based IDS 
+
+- analizeaza traficul de retea pentru a detecta posibile activitati neobisnuite
+- monitorizeaza pachetele de date, fluxurile si comportamentul general al retelei
+- exemple: snort, suricata, zeek. kismet
+
+Moduri de operare:
+
+a) Inline (Active Mode) - tot traficul trece prin IDS, poate bloca sau modifica pachetele
+b) Out-of-Band (Passive Mode) - IDS primeste o copie a traficului, fara a-l influenta
+
+3. Hybrid (Host-Network IDS)
+
+- Combina HIDS (activitate interna a sistemului) cu NIDS (trafic de retea)
+
+4. Target-Based IDS
+
+- o varianta HIDS aplicata numai pe nodurile critice, monitorizeaza activitatea doar in acele puncte
+
+Locatii unde sunt instalate IDS
+
+- gateway firewall (IDS se monteaza in fata firewall-ului)
+- behind firewall (IDS analizeaza traficul deja filtrat, de obicei intre firewall si servere publice)
+- inside private network (IDS instalat intern, pentru detectarea atacurilor interne)
+
+
+IDS aplicat pe diverse tipuri de sisteme
+
+1. Web Application IDS
+
+- protejeaza aplicatiile web impotriva atacurilor asupra HTTP/SQL/etc.
+- poate fi signature-based (recunoaste tipuri de atacuri cunoscute) sau behavioral (monitorizeaza secvente de apeluri de sistem si devieri de la comportamentul normal) 
+- exemple: IDS detecteaza SQL injection, XSS, DoS la nivel de HTTP
+
+2. Cloud IDS
+
+- detecteaza atacuri in infrastructuri Cloud
+- signature-based: extensii de Snort sau Suricata integrate in cloud sau anomaly based (ML care detecteaza activitati neobisnuite in VM-uri sau la nivel de hypervisor)
+- hybrid (combina ambele pentru detectie completa)
+
+3. IoT IDS
+
+- protejeaza dispozitive IoT conectate prin diverse protocoale
+- IDS cu high interaction (foloseste AI pentru a reactiona la anomalii in timp real)
+- IDS cu low interaction (monitorizeaza nivelul de retea si filtreaza DoS sau atacuri IPv6)
+
+4. WSN IDS (Wireless Sensor Networks)
+
+- detecteaza atacuri in retele de senzori (noduri autonome, IoT senzorial)
+- anomaly-based (identifica deviatii in datele de la senzori) sau missue-based (foloseste reguli prestabilite, dar limitat la atacuri cunoscute)
+- hybrid (combina ambele si foloseste algoritmi de ML pentru detectarea comportamentului malitios intre noduri)
+
+5. MANET IDS (Mobile Ad-Hoc Networks)
+
+- detecteaza atacuri in retele mobile, dinamice, fara infrastructura fixa
+- folosesc modele collaborative
+- ROS (Resiliently Oriented Secure routing), detecteaza noduri malitioase prin actualizari de ruta
+- IDSX are arhitectura distribuita
+- G-IDS (Grid-based IDS), foloseste feedback in timp real intre noduri
+- HIDS, bazat pe reputatie si incredere
+- MOCA, BeeID, eSOM, algoritmi hibrizi ML/genetici pentru detectarea DoS si manipularea rutarii
+
+6. VoIP IDS (Voice over Internet Protocol)
+
+- protejeaza comunicatiile VoIP impotriva atacurilor asupra transmisiilor audio si semnalizarii
+- IDS analizeaza pachetele RTP, SIP, H.323 etc. pentru a detecta interceptrari, DoS sau spoofing
+
+
+Anomaly Detection Systems
+
+1. ALAD (Application Layer Anomaly Detector)
+- Detecteaza atacuri la nivel de aplicatie pe baza deviatiilor fata de comportamentul normal al conexiunilor TCP.
+
+2. PHAD (Packet Header Anomaly Detector)
+- Analizeaza valorile din headerele pachetelor (Ethernet, IP, TCP, UDP, ICMP) si semnaleaza anomalii fata de valorile normale.
+
+3. LERAD (Learning Rules for Anomaly Detection)
+- Foloseste invatare automata pentru a genera reguli care descriu comportamentul normal, fara set de date predefinit.
+
+4. MINDS (Minnesota Intrusion Detection System)
+- Sistem bazat pe data mining, care identifica anomalii în fluxurile NetFlow prin clustering si outlier detection.
+
+5. ADAM (Automated Data Analysis and Mining)
+- Utilizeaza tehnici de clasificare si analiza de date pentru a distinge traficul normal de cel atacator.    
+               
+6. MADAM ID (Mining Audit Data for Automated Models)
+- Aplica data mining pe date de audit pentru a construi modele automate de detectie a atacurilor.
+                                    
+7. GIDS (Graph-based Intrusion Detection System)
+- Modeleaza reteaua ca un graf (noduri si conexiuni) si detecteaza anomalii prin analiza relatiilor dintre ele.
+
+8. Rate-Limiting IDS
+- Monitorizeaza conexiunile repetate dintr-un interval scurt si limiteaza traficul suspect (anti-DoS).         
+                      
+9. NIDES (Next-generation Intrusion Detection Expert System)
+- IDS statistic si expert-based, care functionează atat in timp real, cat si pe date inregistrate.  
+                                 
+10. PAYL
+- Analizeaza continutul (payload) pachetelor si detecteaza anomalii in distributia frecventelor de byte.     
+                        
+11. FIRE (Fuzzy Intrusion Recognition Engine)
+- Foloseste reguli fuzzy pentru a determina daca o activitate este anormala.                                                         
+
+12. NETAD (Network Traffic Anomaly Detector)
+- Similar cu PHAD, dar analizeaza primii 48 bytes din fiecare pachet pentru a identifica deviatii.                                   
+
+13. EMERALD (Event Monitoring Enabling Responses to Anomalous Live Disturbances)
+- IDS ierarhic care monitorizeaza evenimente pe mai multe niveluri (host, domeniu, rețea) combinand analiza statistica si expertiza.
+
+
+2 solutii propuse de mine
+
+1) Vreau sa ating si anomaly si signature detection. Doar ca pentru anomaly am nevoie de module de ML.
+Astfel, AIEngine este un tool de inspectare de pachete, care suporta si integrarea de module ML. Asa o sa fac un wrapper intre suricata si AIEngine ca sa obtin comunicare bidirectionala, update reguli in functie de reteaua mea daca nu se mai comporta normal, detectand atacuri zero-day.
+
+2) A doua abordare sa vb cu cei de la Keysight sa vad daca ma lasa sa iau un set de date, generat de diferite AP-uri cu diferite scenarii care sunt modificabile din software. Ideea e ca folosim 2 tooluri de IDS: Kismet pentru Layer 2 si Suricata Layer 3 si 4. Kismet impreuna cu modulul de ML dezvoltat de mine ajuta la prevenirea unor atacuri mai devreme si atunci cand se analizeaza pachetul la Layer 3 si primesc un raspuns sa corelez mai usor atacul. Practic le combin pe ambele pentru rezultate mai in detaliu si mai accurate. ARP spoofing, MITM
+
+
+
+
+
+

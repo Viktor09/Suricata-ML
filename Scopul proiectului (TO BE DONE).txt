@@ -1,0 +1,133 @@
+Scopul proiectului (TO BE DONE)
+
+Ce vreau sa obtin?
+
+Scopul proiectului este de a obtine un sistem automat care detecteaza atacuri cibernetice la nivelul retelei interne si externe, folosind la baza Suricata.
+
+
+
+Solutia propune o abordare hibrida in contextul metodelor de detectie ale sistemelor de intruziune, care include atat anomaly detection - mecansim care se adapteaza la mediul specific analizat -, cat si detectarea atacurilor pentru care nu este suficienta identificarea semnaturilor. Aceasta abordare ne aduce beneficiul de a putea identifica tipare variabile in functie de obiectivul atacatorului si avantajul capturarii atacurilor de tipul zero-day. 
+
+Pentru a realiza un sistem bazat si pe anomaly detection, am ales sa implementez un modul de Machine Learning bazat pe Supervised Learning.
+To achive a system based on anomaly detection, I choose to implement a Machine Learing module based on Supervised Learning.
+
+Pe langa faptul ca sistemul detecteaza atacuri cibernetice, acesta ofera si trimiterea automata de notificari catre utilizator atunci cand un atac are loc, vizualizarea centralizata a starii retelei in timp real si feedback continuu privind actualizarea regulilor in functie de comportamentul observat in retea. 
+
+
+Comparatie solutii existente (TO BE DONE)
+
+Solutiile automate de identificare a intruziunilor au inceput sa se dezvolte si sa inregistreze imbunatatiri seminficative odata cu evolutia tehnicilor de invatare automata.
+
+Arhitecturile vechi ale sistemelor de monitorizare a securitatii retelelor se bazau pe o analiza statica si dinamica. Cea statica este orientata doar pe semnaturi, prin cautarea si corelarea acestora intr-o baza de date, urmata de afisarea rezultatelor. Totodata, analiza dinamica consta in izolarea unui mediu in care atacurile sunt simulate prin sandboxing, unde codul malitios este executat, scopul fiind observarea schimbarii comportamentului sistemului.
+
+In schimb, cele noi ofera o alta viziune, una bazat pe adaptarea automata a sistemului. Datele provenite din capturi sunt interceptare, ulterior preprocesate si introduse intr-un model de Machine Learning.
+Analizand mai multe sisteme automate, am observat urmatoarele avantaje si dezavantaje in comparatie cu solutia dezvoltata in cadrul acestui proiect.
+
+Mai jos este un tabel cu solutii existente si prin ce se remarca fiecare solutie.
+
+
+
+
+				 My Suricata ML Automated System | Multi-IDS DoS Simulation System |  Water-DT ML-IDS  | Integrated SIEM–IDS Live Analysis System
+
+Purpose		Automated multi-attack detection system using Suricata and ML models,	Traffic filtering using multiple IDS for DDoS detection, , Construirea unui sistem unificat pentru analiza live a atacurilor.
+
+ML Integration  Yes (Unique Machine Learning modules based on different available datasets), No (Mentioned as future directions), Yes (Model trained on OD-IDS2022 dataset), Yes (Slips as a Machine Learning Process)
+
+Types of Attacks Arp Spoofing, DHCP Starvation, DDoS attacks, Port scanning, Web Application Attacks; DoS attacks; Brute force attacks, remote code execution, network flooding; DDoS attacks
+
+Attack Variation Detection Yes, No, Yes, Yes
+
+Log Aggregation Yes (OpenSearch), Yes (ELK Stack), Yes (Zabbix), Yes (ELK Stack)
+
+Automatic Notification Yes (Email alerts), Not specificed, Yes (Zabbix alerts), Yes (Elastalert)
+
+Feedback Loop (Self-Improvement) Yes, No, No, Partial-Adaptive
+
+
+Nucleul sistemului meu automat constă în Suricata, un instrument de detecție și prevenire a intruziunilor, utilizat în acest proiect strict ca IDS, pe baza unui set de reguli. Alături de Suricata, mai există și alte soluții, precum Snort, Zeek și Wazuh. Înainte de a face o comparație directă între ele, este important de menționat că Suricata este un IDS/IPS și motor de analiză a traficului capabil de inspectare profundă și procesare paralelă, ceea ce îl diferențiază de celelalte soluții.
+
+				Suricata | Snort | Zeek | Wazuh
+
+Use Case 			Real-time IDS/IPS and NSM; Real-time IDS/IPS; Forensic investigation, threat hunting and NSM; Host intrusion detection, rootkits, file integrity monitoring
+Detection Approach  		Signature and Anomaly based; Signature based; Protocol and behavioral analysis; Signature and Anomaly based		
+DPI Level			Advanced DPI (Layer 3-7); Limited DPI (Layer 3-7); No DPI(analyzes metadata and protocol behavoir), No DPI (host-based event analysis)
+Output				Unified JSON(eve, fast); Various logs(unified2, text, json, csv); Structured logs(TSV, JSON); Structured JSON alerts and logs
+Integration			SIEM, ELK Stack, Splunk, firewalls; pfSense, SIEM, firewalls; SIEM, ELK Stack, Threat Hunting Platforms; SIEM, ELK Stack, OpenSearch, Splunk
+ML Integration			Exports Data for external ML; Exports data for external ML; Scriptable for ML integration; Integrated (built-in detection rules and ML-ready telemetry)
+Performance			Multi-Threaded Processing; Single-Threaded Processing (Snort2) / Limited Multi-threaded Processing (Snort3); Distributed multi-node processing; Depends on agent-level overhead 
+
+
+Obiectivele proiectului (TO BE DONE)
+
+Principalele obiective ale proiectului, necesare pentru realizarea automatizarii propuse, sunt urmatoarele:
+
+- Dezvoltarea modului de Machine Learning pentru atacuri interne la nivelul 2 (L2) din stiva OSI. Acest modul va analiza anomalii specifice traficului de tip ARP Spoofing si DHCP Starvation, folosind interceptarea de pachete la nivelul legaturii de date si va determina, pe baza comportamentului observat in retea, daca un anumit dispozitiv din retea poate fi considerat un potential atacator.
+
+- Relizarea Modului de Machine Learning pentru atacuri interne si externe la nivelurile superioare (L3-7) din stiva OSI. Modulul va utiliza modele ML existente, pe care se va aplica fine-tuning in functie de dataset-urile specifice. Obiectivul este detectarea anomaliilor in protocoalele de retea (IP, TCP/UDP, HTTP, DNS, etc.).
+
+- Implementarea unui motor de generare dinamica a regulilor (Dynamic Rule Engine). Aceasta componenta va functiona ca un wrapper inteligent intre modulele de ML si Suricata. Rolul lui este sa traduca rezultatele detectiilor ML in reguli Suricata actualizate automat.
+
+- Integrarea cu un SIEM pentru vizualizare si notificare. SIEM-ul va centraliza toate alertele generate de Suricata, va corela incidentele si va trimite notificari prin email utilizatorului in cazul identificarii unui atac.
+
+- Integrarea unui modul MISP (Malware Information Sharing Platform). Obiectivul integrarii MISP este de a imbogati procesul de detectie prin introducerea indicatorilor de compromitere (IoC) actualizati dintr-o platforma externa de threat intelligence.
+
+
+Related work
+
+- o sa incep cu modulele de ML de Layer 2 la inceput
+- de ce atacurile pe care le-am ales sunt relevante si daca chiar sunt de actualitate
+- faptul ca in ziua de azi e de actualitate crearea de modele de ML pe parte de atacuri interne, special pentru companii e facuta treaba asta, un criptarea introduce overhead, e o nisa pe care lume de abia acum o exploreaza cu evolutia AI-ului, 
+- am gasit un articol care ajuta la adaugarea de feature-uri relevante pe baza pachetelor clasice de ARP
+- am gasit un set de date care poate fi derivat si este si label-uit
+- urmeaza construirea unei topologii locale pentru a simula acolo ARP Spoofing si pentru a putea augmenta cu dataset-ul existent sa mai adaug niste valori
+- dupa care vine partea de antrenare si compararea rezultatelor
+
+
+Una dintre componentele ce aduce unicitate in lucrarea mea de licenta si care aduce un plus IDS-ului Suricata este modulul de ML care functioneaza pe niveul 2 din stiva OSI pentru identificarea atacurilor interne. Principalul motiv pentru care am ales integrarea si detectarea atacurilor de nivel 2 este faptul ca aceste atacuri nu sunt observabile indeajuns pentru un IDS care functioneaza pe nivelurile superioare ale stivei OSI. Atacuri precum ARP Spoofing, DHCP Starvation, Rougue DHCP si multe altele sunt strict legate de reteaua locala si nu se reflecta in traficul IP sau TCP/UDP. 
+
+Nivelurile 3-7 presupun atacuri pe partea de transport, porturi sau aplicatie, unde detectarea poate fi facuta eficient prin semnaturi. In schimb, atacurile de nivel 2 pot fi detectate doar prin comportamentul cadrelor Ethernet si a protocoalelor locale, care nu sunt vizibile la nivel IP.
+
+Un modul ML dedicat pentru Layer 2 ofera o vizibilitate mai mare sistemului.
+
+Aceasta abordare in contextul uzual este utila in securitatea retelelor High Frequency Trading. Deoarece succesul in tranzactionare este dat de latenta de ordinul micro sau milisecudelor, solutiile de securitate care introduc overhead masiv, precum criptarea end-to-end sunt de foarte multe orice neacceptabile. De accea un modul care nu introduce bottleneck-uri de latenta si se concentreaza pe anomaliile protocoalelor locale si insider threats devine essential.
+
+
+Acum o sa incep cu ARP Spoofing, de ce e essential in 2025, faptul ca am gasit un dataset neprelucrat, dar foarte valoros din cauza altui articol deoarece pot sa extrag featureuri noi importante din el si apoi sa il augmentez pe reteaua mea locala compusa din end-device-uri si switch-uri cu date extra, antrenez modelul si aflu rezultatele.
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Una dintre componentele care conferă unicitate lucrării mele și aduce un plus semnificativ peste funcționalitățile IDS-ului Suricata este modulul de Machine Learning dedicat nivelului 2 al stivei OSI, orientat spre identificarea atacurilor interne. Principalul motiv pentru includerea detecției de atacuri L2 este acela că aceste amenințări nu sunt vizibile în mod adecvat pentru un IDS tradițional, orientat predominant pe nivelurile superioare ale stivei. Atacuri precum ARP Spoofing, DHCP Starvation, Rogue DHCP și altele se manifestă exclusiv în rețeaua locală și nu se reflectă în traficul IP sau TCP/UDP, motiv pentru care un IDS bazat pe analiza L3–L7 le poate rata complet.
+
+Nivelurile 3–7 acoperă atacurile asupra transportului, porturilor sau aplicațiilor, unde detectarea prin semnături este adesea suficientă și eficientă. În schimb, atacurile de nivel 2 pot fi identificate doar prin analiza comportamentală a cadrelor Ethernet și a protocoalelor locale, care nu sunt vizibile la nivel IP. De aceea, un modul ML dedicat pentru Layer 2 oferă o vizibilitate suplimentară sistemului și completează zona în care IDS-urile tradiționale au limitări.
+
+Această abordare este relevantă și în contexte sensibile la latență, precum securitatea rețelelor utilizate în High-Frequency Trading (HFT). În astfel de medii, succesul operațional depinde de latențe de ordinul micro- sau milisecundelor, iar soluțiile de securitate care introduc overhead semnificativ – precum criptarea end-to-end – devin, în multe situații, neacceptabile. În acest context, un modul de detecție a anomaliilor locale, care nu introduce blocaje de performanță și se concentrează pe comportamente suspecte ale protocoalelor locale și pe insider threats, devine esențial.
+
+Am ales să încep analiza cu atacul ARP Spoofing, deoarece acesta rămâne extrem de relevant în 2025. În contextul rețelelor moderne, cu un număr tot mai mare de dispozitive IoT și BYOD, precum și cu proliferarea amenințărilor interne, ARP Spoofing reprezintă una dintre cele mai comune și periculoase tehnici de compromitere la nivelul 2 al stivei OSI. În plus, tendința actuală de criptare a traficului la nivelurile superioare (TLS 1.3, E2E) limitează vizibilitatea IDS-urilor tradiționale, ceea ce face detecția la nivelul 2 și mai importantă.
+
+Dataset-ul identificat, deși brut și neprelucrat, este valoros deoarece permite extragerea unor caracteristici originale relevante pentru analiza comportamentului ARP. De asemenea, poate fi augmentat cu capturi suplimentare din rețeaua mea locală, compusă din end-device-uri și switch-uri, pentru a obține un dataset mixt, cu scenarii realiste și variabilitate ridicată. Această augmentare permite antrenarea unui model de Machine Learning robust, adaptat atât la setul de date inițial, cât și la traficul real dintr-o infrastructură modernă.
+
+
+
+Scopul proiectul este automatizarea un sistem ce detecteaza atacuri cibernetice ce vin din interiorul sau exteriorul retelei, folosind IDS-ul Suricata ca componenta principala a solutiei.
+
+Automatizarea are la baza urmatoarele componente: 2 module de Machine Learning pentru detectarea atacurilor, unul pentru Layer 2 si altul pentru Layerele 3-7, un wrapper (Dynamic Rule Engine) ce are ca scop sa traduca rezultatele din modulele de Machine Learning in reguli Suricata in mod automat, integrarea cu un SIEM pentru vizualizare de incidente si alertare prin email catre utilizator si un MISP. 
+
+In implementare o sa incep sa construiesc mai intai modulele de Machine Learning, incepand cu cel de Layer 2. Principalul motiv pentru care am ales integrarea si detectarea atacurilor de nivel 2 este faptul ca aceste atacuri nu sunt observabile indeajuns pentru un IDS care functioneaza pe nivelurile superioare ale stivei OSI. Atacuri precum ARP Spoofing, DHCP Starvation, Rougue DHCP si multe altele sunt strict legate de reteaua locala si nu se reflecta in traficul IP sau TCP/UDP. 
+
+Nivelurile 3-7 presupun atacuri pe partea de transport, porturi sau aplicatie, unde detectarea poate fi facuta eficient prin semnaturi. In schimb, atacurile de nivel 2 pot fi detectate doar prin comportamentul cadrelor Ethernet si a protocoalelor locale, care nu sunt vizibile la nivel IP. Un modul ML dedicat pentru Layer 2 ofera o vizibilitate mai mare sistemului.
+
+Am ales 2 tipuri de atacuri pentru modulul de Layer 2: ARP Spoofing si DHCP Starvation. Pentru ARP Spoofing o sa folosesc un dataset existent, care este neprelucrat, reprezinta o analiza de pachete ARP, dar fiind complet si reprezentand un scenariu am descoperit un articol prin care pot se pot deriva niste metrici utile, prin care o sa antrenez modelul.
+
+Aceste metrici sunt: inconsistenta IP-MAC (daca un IP are doar un MAC e ok, raport 0, daca nu raportul creste spre 1), voltatilitate (cat de des un IP trimite arp intr-un timp foarte scurt), consistenta MAC-IP al hostului (pentru fiecare nod/host se calculeaza cate perechi MAC-IP diferite are, raportat la numarul total de apariti), H (ARP suspect adica gratuitous / replay fara cerere, flag 0 sau 1, caut request + replay apropiat daca nu e inseamna ca e suspect).
+
+Dupa ce obtin noile atribute pe baza formulelor de mai sus, voi simula acelasi tip de atac si pe propria retea locala. Apoi voi extrage un set de caracteristici, reprezentand aproximativ 10-20% din dimensiunea datasetului principal, pentru a le combina ulterior. In acest fel, vom putea utiliza modelul rezultat direct pe reteaua noastra.
+
+Analog, pentru DHCP Starvation, doar ca aici nu am gasit momentan un dataset, o sa trebuiasca sa fac research, dar planul in mare e acelasi ca la ARP Spoofing. 
+
+O problema ar fi overhead-ul dintre modele, DRE si Suricata, nu stiu cat de mult incentineste procesul acesta, trebuie vazut, este de dorit sa avem feedback rapid.
+
+
+

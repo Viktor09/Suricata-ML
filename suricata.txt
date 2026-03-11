@@ -1,0 +1,55 @@
+Suricata
+
+I. Reguli in Suricata
+
+- actiuni: 
+	a) ALERT este de tipul IDS (daca traficul e considerat malitios se genereaza o alerta care e scrisa in fisierele eve.json si fast.json)
+	b) PASS este tot de tipul IDS (packet-ul e lasat sa treaca in retea prin regula asta si nu va mai fi inspectat)
+        c) DROP este de tipul IPS (traficul care indeplineste regula este aruncat, astfel nici sursa nici destinatia nu va fi notificata)
+	d) REJECT tot de tipul IPS (la fel ca DROP, numai ca sursa si destinatia vor fi notificate)
+
+- header:
+	a) PROTOCOL este tipul de trafic pe care il inspecteaza regula si defineste limbajul de comunicare intre sursa si destinatie (specifica nivelul de retea/aplicatie: TCP, UDP, HTTP, DNS, FTP, SSH etc.) si in functie de protocol se pot defini niste keywords in OPTIONS (TCP -> flags, flow, seq, ack; UDP -> content; HTTP -> http_header, http_uri, http_method)
+	b) SOURCE IP and PORT
+	c) DESTINATION IP and PORT
+
+Observatie: destinatia poate fi doar de la sursa la destinatie -> sau bidirectionala <>, dar niciodata de la destinatie la sura.
+
+- option descrie ce anume cauta regula in pachet si ce mesaj/log genereaza cand e gasit (msg:"mesajul afisat in alerta", content:"ce sir de caractere cauta in payload", pcre:"expresie regulata pentru pattern complex", flow:"stare conexiune", classtype:"tip atac", sid:"ID unic al regulii")
+
+- /var/log/suricata/fast.log prezinta un raport sumarizat de atacuri
+- /var/log/suricat/eve.json contine informatii despre pachetele malitioase care curg prin retea
+
+
+
+II. Exemple de options in Suricata
+
+a) Meta Keywords (nu au efect cand Suricata analizeaza traficul)
+
+1) Identitate si versiuni
+
+- msg: "some description" (mesajul care apare in alerte, explica ce detecteaza semnatura)
+- sid: 123; (identificator unic pentru semnatura) si vine la pachet cu rev:123 (versiunea semnaturii)
+- gid: 1 (ID de grup, lasat implicit 1 si se schimba doar pentru grupuri personalizate)
+
+2) Clasificare si severitate
+
+- classtype:web-aplication-attack (mapeaza alerta la o categorie definita in classification.conf, dandu-i o prioritate implicita)
+- priority:1 (optional, seteaza manual nivelul de prioritate, 1 = critica, suprascrie valoarea din classtype) 
+
+3) Investigatie si thread intel
+
+- reference:url,www.info.com/cve,CVE-2014-1234 (ofera sursa vulnerabilitatii sau context extern)
+- metadata: key value/cve CVE-2014-1234 (adauga informatii suplimentare)
+- target: dest_ip/src_ip (indica cine este tinta)
+
+b) IP Keywords
+
+a) Special pentru IP
+
+- ip_proto:1 (specificarea protocolului: TCP/UDP/ICMP)
+- ttl:10 (detectarea TTL-ului anormal)
+- iplen (detectarea pachete cu lungime neobisnuita)
+- fragbits/fragoffset (detectare evaziune prin fragmentare, este foarte important pentru a prinde atacuri ce incearca sa ocoleasca signature matching)
+- sameip; (sursa == destinatie, poate indica spoofing sau loopback abuse)
+- geoip: src,RU; (blocare/alertare pe tara)

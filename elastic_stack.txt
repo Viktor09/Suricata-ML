@@ -1,0 +1,147 @@
+I. Elastic Stack
+
+- colectie de produse software folosite pentru colectare de date si log-uri, analiza si vizualizare
+- sunt folosite Elasticsearch, Logstash, Kibana
+- elastic stack e pe host, adica elk-VM si configurarea pe alt host helper-VM
+
+II. Gestionare masini virtuale KVM
+
+- virsh e interfata in linia de comanda pentru gestionarea masinilor virtuale KVM prin biblioteca libvirt
+- virsh e terminal pt KVM, cum e docker pentru containere
+- ce pot face cu el: sa pornesc/opresc VM-uri; sa vad statusul lor; sa intru in consola; sa vad retelele, volumele, interfetele, etc; 
+
+a) Management general
+
+- sudo virsh list -all (listez toate VM-uri, inclusiv cele oprite)
+- sudo virsh dominfo <vm_name> (detalii despre o masina virtuala, de ex: CPU, memorie, stare)
+- sudo virsh dumpxml <vm_name> (afiseaza configuratia XML completa)
+
+b) Controlul masinilor virtuale
+
+- sudo virsh start <vm_name> (porneste VM-ul)
+- sudo virsh shutdown <vm_name> (trimite shutdown gracefull)
+- sudo virsh reboot <vm_name> (reporneste VM-ul)
+- sudo virsh destroy <vm_name> (opreste fortat VM-ul)
+- sudo virsh undefine <vm_name> (sterge definitia VM-ului din libvirt)
+
+c) Conectare la consola
+
+- sudo virsh console <vm_name> (iesi din consola virsh prin Ctrl + ])
+
+d) Retea
+
+- sudo virsh net-list --all (listeaza retelele virtuale)
+- sudo virsh net-dhcp-leases <network> (vezi ip-urile si mac-urile alocate de DHCP)
+- sudo virsh net-info <network> (info despre o retea)
+
+e) Stocare (volum = hard-diskul masinii virtuale, de obicei fisier cu extensia .qcow2 sau .img)
+
+- sudo virsh vol-list default (listeaza volumele din storage-ul implicit)
+- sudo virsh vol-info <nume>.qcow2 (detalii despre o imagine de disc)
+- sudo virsh attach-disk <vm> <path> <target> (ataseaza un nou disc)
+
+*** The generated password for the elastic built-in superuser is : jDhXnWwILpLJ8SIluqAX ***
+
+III. Elasticsearch
+
+- baza de date unde sunt stocate si indexate logurile, evenimentele si metricile
+
+a) /usr/share/elasticsearch (contine codul efectiv al aplicatiei, instrumentele si jdk-ul inclus)
+
+- bin/ (contine toate comenzile CLI)
+- jdk/ (include Java Development Kit-ul pe care Elasticsearch il foloseste intern)
+
+b) /etc/elasticsearch (directorul de configurare)
+
+- elasticsearch.yml (fisierul principal de configurare - defineste IP-ul, portul,  autentificarea, cluster name, noduri)
+
+c) /etc/elasticsearch/certs
+
+- contine certificatele generate automat in timpul instalarii, folosite in cazul conexiunilor HTTPS
+
+IV. Kibana 
+
+- interfata web care citeste din elasticsearch si afiseaza datele (dashboards, grafice, query-uri)
+
+- token:
+eyJ2ZXIiOiI4LjcuMCIsImFkciI6WyIxOTIuMTY4LjEwMC4xMDE6OTIwMCJdLCJmZ3IiOiI0MGM0NjVkZWVmZjU2MmI5NTliMDdhMDhjODFmMjg3Njk0YzM1MjEwMjIzODNhMmQ3NGQ5YzMyNGY0Mzg3NjNhIiwia2V5IjoiY0NNakNKb0JaUDk2MkVnYWtFa0Y6bjVxWEdNNUJUTGlaQjdlNEhFRGJXdyJ9
+
+sudo -u kibana /usr/share/kibana/bin/kibana-setup --enrollment-token eyJ2ZXIiOiI4LjcuMCIsImFkciI6WyIxOTIuMTY4LjEwMC4xMDE6OTIwMCJdLCJmZ3IiOiI0MGM0NjVkZWVmZjU2MmI5NTliMDdhMDhjODFmMjg3Njk0YzM1MjEwMjIzODNhMmQ3NGQ5YzMyNGY0Mzg3NjNhIiwia2V5IjoiY0NNakNKb0JaUDk2MkVnYWtFa0Y6bjVxWEdNNUJUTGlaQjdlNEhFRGJXdyJ9
+
+V. Filebeat
+
+- agent care citeste loguri text si le parseaza si le trimite catre eleasticsearch (am un server web care serveste un site si vreau sa vad: cine acceseaza site-ul, ce pagini dau erori, cat de des e accesat)
+
+a) pe VM-ul unde ruleaza Nginx:
+	sudo apt install filebeat
+	sudo filebeat modules enable nginx
+	sudo filebeat setup
+	sudo systemctl enable --now filebeat
+
+b) in /etc/filebeat/filebeat.yml:
+	output.elasticsearch:
+  		hosts: ["https://192.168.100.101:9200"]
+  		username: "elastic"
+  		password: "<parola>"
+  		ssl.certificate_authorities: ["/usr/local/share/ca-certificates/extra/elastic.crt"]
+
+VI. Auditbeat
+
+- agent care citeste evenimente de sistem si securitate (am un server linux in care vreau sa stiu: daca cineva a modificat fisiere sensibile, s-au create procese suspecte, s-a conectat un user neautorizat)
+
+a) pe VM configuram:
+	sudo apt install auditbeat
+	sudo systemctl enable auditbeat
+
+b) in /etc/auditbeat/auditbeat.yml
+	auditbeat.modules:
+	- module: file_integrity
+  	  paths:
+    		- /bin
+    		- /etc
+    		- /usr/sbin
+  	  recursive: true
+
+	- module: system
+ 	  datasets:
+    		- host
+    		- process
+    		- socket
+    		- login
+
+VII. Packetbeat
+
+- agent care monitorizeaza traficul de retea (am mai multe servere si vreau sa vad: ce trafic circula intre ele, sa identific incetiniri sau erori, sa stiu daca aplicatiile comunica cum trebuie)
+
+a) pe VM configuram:
+	sudo apt install packetbeat
+	sudo systemctl enable --now packetbeat
+
+b) in /etc/packetbeat/packetbeat.yml:
+	packetbeat.interfaces.device: any
+	packetbeat.protocols:
+  		- type: http
+  		  ports: [80, 8080, 8000, 5000]
+  		- type: dns
+  		  ports: [53]
+  		- type: mysql
+    		  ports: [3306]
+
+VIII. Observatii certificat!
+
+Filebeat si Kibana au nevoie de certificatul CA al Elasticsearch ca sa ii poata verifica identitatea si sa comunice criptat, in siguranta, prin HTTPS.
+
+
+
+
+
+GitLab token: glpat-JlP4QPeTve-9IcPq-F-IUm86MQp1OjN2aQk.01.0z03hircg
+
+
+ssh -i ~/.ssh/id_openstack -J victor.mandescu@fep.grid.pub.ro -fN -D 8220 student@10.9.4.80
+
+
+
+
+
+
