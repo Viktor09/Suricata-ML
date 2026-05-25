@@ -1,4 +1,5 @@
 import subprocess
+import os
 import pandas as pd
 import numpy as np
 import torch
@@ -8,8 +9,9 @@ import pickle
 import sys
 import json
 import time
-
 from collections import deque
+
+suricata_json = "arp_victims.json"
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_length: int = 50):
@@ -57,133 +59,210 @@ class ARPSpoofingModel(nn.Module):
         combined = torch.cat([seq_representation, dyn_representation], dim=1)
         return self.classifier(combined)
 
+def load_model(model_name):
+    try:
+        with open(model_name, "rb") as f:
+            deploy_data = pickle.load(f)
 
-try:
-    with open('arp_model_deploy.pkl', 'rb') as f:
-        deploy_data = pickle.load(f)
+        model = deploy_data["model"]
+        scaler_s = deploy_data["scaler_s"]
+        scaler_d = deploy_data["scaler_d"]
 
-    model = deploy_data['model']
-    scaler_s = deploy_data['scaler_s']
-    scaler_d = deploy_data['scaler_d']
-    
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model.to(device)
-    model.eval()
-    print(f"Model loaded on {device}.")
-except Exception as e:
-    print(f"Error loading model: {e}")
-    sys.exit(1)
+        device = None
+        if torch.cuda.is_available():
+            device = "cuda"
+        else:
+            device = "cpu"
+
+        model.to(device)
+        model.eval()
+        print(f"Model loaded on {device}.")
+
+        return device, scaler_s, scaler_d, model
+
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        sys.exit(1)
+
+def clear_json():
+    try:
+        with open(suricata_json, "w") as f:
+            json.dump({
+                "status": "clear",
+                "timestamp": time.time(),
+                "event_type": "clear",
+                "src_ip": None,
+                "dest_ip": None,
+                "alert": {}
+            }, f)
+    except PermissionError:
+        print(f"[WARN] Cannot write {suricata_json}")
+
+def get_ip_by_mac(mac, real_ip_mac_map):
+    for ip, known_mac in real_ip_mac_map.items():
+        if known_mac == mac:
+            return ip
+    return "unknown"
+
+def update_baseline(df_window, real_ip_mac_map, attack_active):
+
+    if attack_active:
+        return
+
+    for _, row in df_window.iterrows():
+        ip = row["arp_src_ip"]
+        mac = row["arp_src_mac"]
+
+        if not ip or not mac:
+            continue
+
+        if ip not in real_ip_mac_map:
+            real_ip_mac_map[ip] = mac
 
 
-def calculate_static_features(scenario_df, ip_gateway="192.168.2.1"):
-    df = pd.DataFrame()
-    df['timedelta'] = scenario_df['timestamp'].diff().fillna(0)
-    df['arp_code'] = scenario_df['arp_code']
-    df['is_gratuitous'] = scenario_df['is_gratuitous']
-    df['is_broadcast'] = scenario_df['is_broadcast']
+def calculate_dynamic_features_global(scenario_window_df, real_ip_mac_map, delta=0.1):
 
-    return df
-
-def calculate_dynamic_features_global(scenario_window_df, delta=0.1):
     features = {}
-    suspects = set()
+    victim_ips = set()
+    attackers = {}
 
-    n_requests = (scenario_window_df['arp_code'] == 1).sum()
-    n_replies = (scenario_window_df['arp_code'] == 2).sum()
-    features['RRR'] = min(n_replies / n_requests, 10.0) if n_requests > 0 else float(n_replies)
+    n_requests = (scenario_window_df["arp_code"] == 1).sum()
+    n_replies = (scenario_window_df["arp_code"] == 2).sum()
+
+    if n_requests > 0:
+        features["RRR"] = min(n_replies / n_requests, 10.0)
+    else:
+        features["RRR"] = float(n_replies)
 
     requested_ips = set(scenario_window_df[scenario_window_df['arp_code'] == 1]['arp_dst_ip'])
     orphan_replies = 0
-    attacker_URR = set()
     for _, row in scenario_window_df[scenario_window_df['arp_code'] == 2].iterrows():
-        if row['arp_src_ip'] not in requested_ips:
+        src_ip = row["arp_src_ip"]
+        src_mac = row["arp_src_mac"]
+
+        if not src_ip or not src_mac:
+            continue
+
+        if src_ip not in requested_ips:
             orphan_replies += 1
-            attacker_URR.add(row['arp_src_ip']) 
-    features['URR'] = orphan_replies / (n_replies + 1e-9)
 
-    timedeltas = scenario_window_df['timedelta']
-    features['volatility'] = (timedeltas < delta).sum() / len(scenario_window_df)
-    features['dt_cv'] = timedeltas.std() / (timedeltas.mean() + 1e-9)
+        if src_ip in real_ip_mac_map and src_mac != real_ip_mac_map[src_ip]:
+            victim_ips.add(src_ip)
+            if src_mac not in attackers:
+                attacker_ip = get_ip_by_mac(src_mac, real_ip_mac_map)
+                attackers[src_mac] = {
+                    "attacker_ip": attacker_ip,
+                    "attacker_mac": src_mac,
+                    "victim_ips": set()
+                }
 
-    ip_mac_map = scenario_window_df.groupby('arp_src_ip')['arp_src_mac'].nunique()
-    mac_ip_map = scenario_window_df.groupby('arp_src_mac')['arp_src_ip'].nunique()
-    features['max_MD_i'] = ip_mac_map.max() if not ip_mac_map.empty else 1.0
-    features['max_ID_m'] = mac_ip_map.max() if not mac_ip_map.empty else 1.0
-    attacker_MD = set(ip_mac_map[ip_mac_map > 1].index.tolist())
-    for mac in attacker_MD:
-        ip_series = scenario_window_df[scenario_window_df['arp_src_mac'] == mac]['arp_src_ip'].mode()
-        if not ip_series.empty:
-            suspects.add(ip_series.iloc[0])
+            attackers[src_mac]["victim_ips"].add(src_ip)
+
+    features["URR"] = (orphan_replies / (n_replies + 1e-9))
+    
+    timedeltas = scenario_window_df["timedelta"]
+    features["volatility"] = ((timedeltas < delta).sum()/ len(scenario_window_df))
+    features["dt_cv"] = (timedeltas.std() / (timedeltas.mean() + 1e-9))
+
+    ip_mac_map = scenario_window_df.groupby("arp_src_ip")["arp_src_mac"].nunique()
+    if not ip_mac_map.empty:
+        features["max_MD_i"] = ip_mac_map.max()
+    else:
+        features["max_MD_i"] = 1.0
+
+    mac_ip_map = scenario_window_df.groupby("arp_src_mac")["arp_src_ip"].nunique()
+    if not mac_ip_map.empty:
+        features["max_ID_m"] = mac_ip_map.max()
+    else:
+        features["max_ID_m"] = 1.0
 
     max_ri = 0.0
-    ip_groups = scenario_window_df.groupby(['arp_src_ip', 'arp_src_mac']).size().reset_index(name='counts')
-    for ip in ip_groups['arp_src_ip'].unique():
-        counts = ip_groups[ip_groups['arp_src_ip'] == ip]['counts']
+    ip_groups = scenario_window_df.groupby(["arp_src_ip", "arp_src_mac"]).size().reset_index(name="counts")
+    for ip in ip_groups["arp_src_ip"].unique():
+        counts = ip_groups[ip_groups["arp_src_ip"] == ip]["counts"]
         if len(counts) > 1:
             ri = 1 - (counts.max() / counts.sum())
-            if ri > max_ri:
-                max_ri = ri
-    features['max_R_i'] = max_ri
-    suspects.update(attacker_URR)
+            max_ri = max(max_ri, ri)
+    features["max_R_i"] = max_ri
 
-    return features, suspects
+    attackers = list(attackers.values())
+    for attacker in attackers:
+        attacker["victim_ips"] = list(attacker["victim_ips"])
 
-def read_json(path):
+    return features, victim_ips, attackers
+
+
+def build_dataframe(packet_buffer, columns, first_timestamp):
+
+    df_window = pd.DataFrame(packet_buffer, columns=columns)
+    mac_and_ip_cols = {"src_ip": "arp_src_ip", "dst_ip": "arp_dst_ip", "src_mac": "arp_src_mac"}
+
+    df_window["timestamp"] = df_window["timestamp"].astype(float) - first_timestamp
+    df_window["timedelta"] = df_window["timestamp"].diff().fillna(0)
+    df_window["arp_code"] = df_window["opcode"].map({"1": 1, "2": 2}).fillna(1).astype(int)
+    df_window["is_gratuitous"] = ((df_window["src_ip"] == df_window["dst_ip"]) & (df_window["src_ip"] != "")).astype(int)
+    df_window["is_broadcast"] = (df_window["dst_mac"].str.lower() == "ff:ff:ff:ff:ff:ff").astype(int)
+    df_window = df_window.rename(columns=mac_and_ip_cols)
+
+    return df_window
+
+
+if __name__ == "__main__":
+
+    model_name = "arp_model_deploy.pkl"
+    device, scaler_s, scaler_d, model = load_model(model_name)
+
+    first_timestamp = None
+    attack_active = False
+
+    window_size = 3
+    attack_min = 2
+
+    real_ip_mac_map = {}
+    affected_ips = set()
+    chunk_window = deque(maxlen=window_size)
+    packet_buffer = []
+
+    columns = ["timestamp", "src_mac", "src_ip", "dst_mac", "dst_ip", "opcode"]
+
+    cmd = ["tshark", "-l", "-n", "-i", "virbr-labs", "-f", "arp", "-T", "fields",
+        "-e", "frame.time_epoch", "-e", "eth.src", "-e", "arp.src.proto_ipv4",
+        "-e", "eth.dst", "-e", "arp.dst.proto_ipv4", "-e", "arp.opcode",
+        "-E", "header=n", "-E", "separator=,"
+    ]
+
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, env={**os.environ, "TMPDIR": "/dev/shm"})
+
+    print("Starting live detection...")
+
     try:
-        with open(path, 'r') as f:
-            return json.load(f)
-    except:
-        return []
+        for line in process.stdout:
+            parts = line.strip().split(",")
+            if len(parts) == 6:
+                packet_buffer.append(parts)
 
-def write_json(path, data):
-    with open(path, 'w') as f:
-        json.dump(data, f, indent=2)
+            if len(packet_buffer) < 50:
+                continue
 
-cmd = [
-    "tshark", "-i", "virbr-labs", "-f", "arp", "-T", "fields",
-    "-e", "frame.time_epoch", "-e", "eth.src", "-e", "arp.src.proto_ipv4",
-    "-e", "eth.dst", "-e", "arp.dst.proto_ipv4", "-e", "arp.opcode",
-    "-E", "header=n", "-E", "separator=,"
-]
-
-process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-columns = ["timestamp", "src_mac", "src_ip", "dst_mac", "dst_ip", "opcode"]
-packet_buffer = []
-first_timestamp = None
-window_size = 3
-attack_min = 2
-chunk_window = deque(maxlen=window_size)
-suricata_json = "arp_victims.json"
-affected_ips = set()
-
-print("Starting live detection...")
-
-try:
-    for line in process.stdout:
-        parts = line.strip().split(",")
-        if len(parts) == 6:
-            packet_buffer.append(parts)
-
-        if len(packet_buffer) == 50:
             if first_timestamp is None:
                 first_timestamp = float(packet_buffer[0][0])
 
-            df_window = pd.DataFrame(packet_buffer, columns=columns)
-            df_window["timestamp"] = df_window["timestamp"].astype(float) - first_timestamp
-            df_window['timedelta'] = df_window['timestamp'].diff().fillna(0)
-            df_window['arp_code'] = df_window['opcode'].map({"1": 1, "2": 2}).fillna(1).astype(int)
-            df_window['is_gratuitous'] = ((df_window['src_ip'] == df_window['dst_ip']) & (df_window['src_ip'] != "")).astype(int)
-            df_window['is_broadcast'] = (df_window['dst_mac'].str.lower() == "ff:ff:ff:ff:ff:ff").astype(int)
-            df_window = df_window.rename(columns={'src_ip': 'arp_src_ip', 'dst_ip': 'arp_dst_ip', 'src_mac': 'arp_src_mac'})
+            df_window = build_dataframe(packet_buffer, columns, first_timestamp)
+            update_baseline(df_window, real_ip_mac_map, attack_active)
 
-            timedelta_scaled = scaler_s.transform(df_window[['timedelta']].values)
-            
+            if not real_ip_mac_map:
+                print("[BASELINE BUILDING] waiting for valid ARP mappings...")
+                packet_buffer = []
+                continue
+
+            timedelta_scaled = scaler_s.transform(df_window[["timedelta"]].values)
+
             s_final = np.hstack([
                 timedelta_scaled, 
                 df_window[['arp_code', 'is_gratuitous', 'is_broadcast']].values
             ])
 
-            dynamic_dict, suspects = calculate_dynamic_features_global(df_window, 0.1)
+            dynamic_dict, victim_ips, attackers = calculate_dynamic_features_global(df_window, real_ip_mac_map, 0.1)
             d_cols = ['URR', 'RRR', 'volatility', 'max_R_i', 'max_MD_i', 'max_ID_m', 'dt_cv']
             d_raw = np.array([dynamic_dict.get(col, 0) for col in d_cols]).reshape(1, -1)
             d_final = scaler_d.transform(d_raw)
@@ -198,29 +277,54 @@ try:
             chunk_window.append(status)
 
             no_attacks = chunk_window.count("ATTACK")
-            no_normals = chunk_window.count("NORMAL")
 
-            if len(chunk_window) == window_size and no_attacks >= attack_min:
-                new_ips = suspects - affected_ips
-                if new_ips:
-                    affected_ips.update(new_ips)
-                    with open(suricata_json, 'w') as f:
-                        json.dump({"status": "ATTACK", "affected_ips": list(affected_ips), "timestamp": time.time()}, f)
-                    print(f"[CONFIRMED ATTACK] New IPs: {new_ips} | All affected: {affected_ips}")
-                else:
-                    print(f"[CONFIRMED ATTACK] Prob: {prob:.4f} | No new suspects")
+            if len(chunk_window) == window_size and no_attacks >= attack_min and len(attackers) > 0 and len(victim_ips) > 0:
+                attack_active = True
+                affected_ips.update(victim_ips)
+
+                for attacker in attackers:
+                    print(
+                        f"IP Attacker: {attacker['attacker_ip']} | "
+                        f"MAC Attacker: {attacker['attacker_mac']} | "
+                        f"IP victims: {attacker['victim_ips']}"
+                    )
+
+                status_dict = {
+                    "status": "attack",
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "event_type": "alert",
+                    "src_ip": attacker["attacker_ip"],
+                    "dest_ip": attacker["victim_ips"],
+                    "alert": {
+                        "signature": "ARP Spoofing attack detected",
+                        "severity": 2
+                    }
+                }
+
+                with open(suricata_json, "w") as f:
+                    json.dump(status_dict, f, indent=2)
+
+                print(f"[ATTACK] Prob: {prob:.4f} | Window: {list(chunk_window)}")
+
             else:
-                if affected_ips:
-                    affected_ips.clear()
-                    with open(suricata_json, 'w') as f:
-                        json.dump({"status": "CLEAR", "affected_ips": [], "timestamp": time.time()}, f)
-                    print(f"[ATTACK ENDED] JSON cleared")
-                else:
-                    print(f"[Normal] Prob: {prob:.4f} | Window: {list(chunk_window)}")
+                attack_active = False
+                affected_ips.clear()
+                clear_json()
+                print(f"[Normal] Prob: {prob:.4f} | Window: {list(chunk_window)}")
+
             packet_buffer = []
 
-except KeyboardInterrupt:
-    print("\nStopping...")
-    with open(suricata_json, 'w') as f:
-        json.dump({"status": "CLEAR", "affected_ips": [], "timestamp": time.time()}, f)
-    process.terminate()
+        err = process.stderr.read()
+        print("tshark stopped unexpectedly.")
+        if err:
+            print(f"tshark error:\n{err}")            
+
+    except KeyboardInterrupt:
+
+        print("\nStopping...")
+        clear_json()
+
+        try:
+            process.terminate()
+        except Exception:
+            pass
