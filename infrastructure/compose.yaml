@@ -1,0 +1,112 @@
+services:
+  suricata:
+    build: ./suricata
+    container_name: suricata
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - suricata-logs:/var/log/suricata
+      - dynamic-rules:/etc/suricata/rules
+      - suricata-socket:/var/run/suricata
+    restart: unless-stopped
+
+  arp-model:
+    build: ./arp_spoofing_model
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - alerts:/app/alerts
+    restart: unless-stopped
+    depends_on:
+      - suricata
+
+  ddos-model:
+    build: ./ddos_model
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - alerts:/app/alerts
+    restart: unless-stopped
+    depends_on:
+      - suricata
+
+  suricata-wrapper:
+    build: ./suricata_wrapper
+    container_name: suricata_wrapper
+    network_mode: host
+    volumes:
+      - alerts:/app/alerts
+      - dynamic-rules:/etc/suricata/rules
+      - suricata-socket:/var/run/suricata
+    restart: unless-stopped
+    depends_on:
+      - suricata
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.4.2
+    container_name: elasticsearch
+    network_mode: host
+    environment:
+      - node.name=soccare-victor-mandescu
+      - cluster.initial_master_nodes=soccare-victor-mandescu
+      - xpack.security.enabled=true
+      - xpack.security.enrollment.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.keystore.path=certs/http.p12
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.security.transport.ssl.keystore.path=certs/transport.p12
+      - xpack.security.transport.ssl.truststore.path=certs/transport.p12
+      - http.host=0.0.0.0
+      - ES_JAVA_OPTS=-Xms8g -Xmx8g
+    volumes:
+      - /home/ubuntu/elasticsearch-9.4.2/config/certs:/usr/share/elasticsearch/config/certs:ro
+      - /home/ubuntu/elasticsearch-9.4.2/config/elasticsearch.keystore:/usr/share/elasticsearch/config/elasticsearch.keystore:ro
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:9.4.2
+    container_name: filebeat
+    network_mode: host
+    user: root
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - suricata-logs:/var/log/suricata:ro
+      - filebeat-registry:/usr/share/filebeat/data
+    restart: unless-stopped
+    depends_on:
+      - suricata
+      - elasticsearch
+    command: filebeat -e --strict.perms=false
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.4.2
+    container_name: kibana
+    network_mode: host
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - ELASTICSEARCH_HOSTS=https://127.0.0.1:9200
+      - ELASTICSEARCH_SSL_VERIFICATIONMODE=none
+      - ELASTICSEARCH_SERVICEACCOUNTTOKEN=AAEAAWVsYXN0aWMva2liYW5hL2tpYmFuYS10b2tlbjpob3BCeWVueFFIV05OdmFnTUNhYU5R
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=cb7f85f2c6f285b7ea2baa33bec3dbca44429c484aff9d50df84ea09166d27a5
+      - XPACK_SECURITY_ENCRYPTIONKEY=696f9568ce707ac27d6e88e80dcd3cfd9979e4d52599e6646c7f1810cfa1fbc0
+      - XPACK_REPORTING_ENCRYPTIONKEY=adb59e46d0581b45795a0b0f91bd9c5a69b6745c0b7643b2f5a399ce8cb5a31e
+      - LOGGING_ROOT_LEVEL=info
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+
+volumes:
+  suricata-logs:
+  dynamic-rules:
+  alerts:
+  suricata-socket:
+  filebeat-registry:
+  elasticsearch-data:

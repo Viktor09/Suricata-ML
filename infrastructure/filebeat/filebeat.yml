@@ -1,0 +1,32 @@
+filebeat.inputs:
+  - type: filestream
+    enabled: true
+    id: suricata-eve
+    paths:
+      - /var/log/suricata/eve.json
+    parsers:
+      - ndjson:
+          keys_under_root: true
+          add_error_key: true
+    tags: ["suricata"]
+    processors:
+      - drop_event:
+          when:
+            not:
+              equals:
+                event_type: "alert"
+
+filebeat.registry.flush: 1s
+
+output.elasticsearch:
+  hosts: ["https://127.0.0.1:9200"]
+  username: "elastic"
+  password: "cQWRvlO3JCCkG4CEkUkm"
+  ssl.verification_mode: none
+  index: "suricata-alerts-%{+yyyy.MM.dd}"
+
+setup.template.name: "suricata-alerts"
+setup.template.pattern: "suricata-alerts-*"
+setup.template.settings:
+  index.number_of_shards: 1
+setup.ilm.enabled: false
