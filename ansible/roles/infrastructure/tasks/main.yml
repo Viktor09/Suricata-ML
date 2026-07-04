@@ -1,0 +1,41 @@
+---
+- name: Create infrastructure directory
+  file:
+    path: "{{ infrastructure_dir }}"
+    state: directory
+    mode: '0755'
+    owner: ubuntu
+    group: ubuntu
+
+- name: Copy infrastructure code
+  synchronize:
+    src: "{{ playbook_dir }}/../infrastructure/"
+    dest: "{{ infrastructure_dir }}/"
+    recursive: true
+    delete: false
+    rsync_opts:
+      - "--exclude=.git"
+
+- name: Update compose.yaml node name
+  replace:
+    path: "{{ infrastructure_dir }}/compose.yaml"
+    regexp: 'node\.name=.*'
+    replace: "node.name={{ ansible_facts['hostname'] }}"
+
+- name: Update compose.yaml cluster master nodes
+  replace:
+    path: "{{ infrastructure_dir }}/compose.yaml"
+    regexp: 'cluster\.initial_master_nodes=.*'
+    replace: "cluster.initial_master_nodes={{ ansible_facts['hostname'] }}"
+
+- name: Set correct permissions on infrastructure directory
+  file:
+    path: "{{ infrastructure_dir }}"
+    owner: ubuntu
+    group: ubuntu
+    recurse: true
+
+- name: Set correct permissions on suricata_start.sh
+  file:
+    path: "{{ infrastructure_dir }}/suricata/suricata_start.sh"
+    mode: '0755'

@@ -1,0 +1,144 @@
+---
+- name: Stop all running containers only on full reset
+  community.docker.docker_compose_v2:
+    project_src: "{{ infrastructure_dir }}"
+    files:
+      - compose.yaml
+    state: absent
+  ignore_errors: true
+  when: elk_reset | default(false) | bool
+
+- name: Remove old elasticsearch data volume only on full reset
+  community.docker.docker_volume:
+    name: elasticsearch-data
+    state: absent
+  when: elk_reset | default(false) | bool
+
+- name: Build and start full stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ infrastructure_dir }}"
+    files:
+      - compose.yaml
+    state: present
+    build: policy
+
+- name: Wait for Elasticsearch to be ready
+  uri:
+    url: "https://127.0.0.1:9200"
+    validate_certs: false
+    status_code: 401
+  register: es_status
+  until: es_status.status == 401
+  retries: 60
+  delay: 10
+
+- name: Reset elastic password only on full reset
+  community.docker.docker_container_exec:
+    container: elasticsearch
+    command: bin/elasticsearch-reset-password -u elastic -b
+  register: reset_output
+  when: elk_reset | default(false) | bool
+
+- name: Extract new password after full reset
+  set_fact:
+    elastic_password: "{{ reset_output.stdout | regex_search('New value: (.+)', '\\1') | first }}"
+  when: elk_reset | default(false) | bool
+
+- name: Load existing credentials file
+  slurp:
+    src: /home/ubuntu/elk_credentials.txt
+  register: existing_credentials
+  ignore_errors: true
+  when: not (elk_reset | default(false) | bool)
+
+- name: Extract existing elastic password
+  set_fact:
+    elastic_password: "{{ (existing_credentials.content | b64decode) | regex_search('elastic_password=(.+)', '\\1') | first }}"
+  when:
+    - not (elk_reset | default(false) | bool)
+    - existing_credentials is defined
+    - existing_credentials.content is defined
+
+- name: Delete existing Kibana token if exists only on full reset
+  uri:
+    url: "https://127.0.0.1:9200/_security/service/elastic/kibana/credential/token/kibana-token"
+    method: DELETE
+    user: elastic
+    password: "{{ elastic_password }}"
+    validate_certs: false
+    force_basic_auth: true
+    status_code: [200, 404]
+  when: elk_reset | default(false) | bool
+
+- name: Generate Kibana service account token only on full reset
+  uri:
+    url: "https://127.0.0.1:9200/_security/service/elastic/kibana/credential/token/kibana-token"
+    method: POST
+    user: elastic
+    password: "{{ elastic_password }}"
+    validate_certs: false
+    force_basic_auth: true
+  register: kibana_token_response
+  when: elk_reset | default(false) | bool
+
+- name: Extract Kibana token after full reset
+  set_fact:
+    kibana_token: "{{ kibana_token_response.json.token.value }}"
+  when: elk_reset | default(false) | bool
+
+- name: Extract existing Kibana token
+  set_fact:
+    kibana_token: "{{ (existing_credentials.content | b64decode) | regex_search('kibana_token=(.+)', '\\1') | first }}"
+  when:
+    - not (elk_reset | default(false) | bool)
+    - existing_credentials is defined
+    - existing_credentials.content is defined
+
+- name: Update filebeat password
+  replace:
+    path: "{{ infrastructure_dir }}/filebeat/filebeat.yml"
+    regexp: 'password:.*'
+    replace: 'password: "{{ elastic_password }}"'
+  when: elastic_password is defined
+
+- name: Update Kibana token in compose.yaml
+  replace:
+    path: "{{ infrastructure_dir }}/compose.yaml"
+    regexp: 'ELASTICSEARCH_SERVICEACCOUNTTOKEN=.*'
+    replace: "ELASTICSEARCH_SERVICEACCOUNTTOKEN={{ kibana_token }}"
+  when: kibana_token is defined
+
+- name: Restart filebeat and kibana with new credentials
+  community.docker.docker_compose_v2:
+    project_src: "{{ infrastructure_dir }}"
+    files:
+      - compose.yaml
+    services:
+      - filebeat
+      - kibana
+    state: present
+    recreate: auto
+  when:
+    - elastic_password is defined
+    - kibana_token is defined
+
+- name: Save credentials to file
+  copy:
+    content: |
+      elastic_password={{ elastic_password }}
+      kibana_token={{ kibana_token }}
+    dest: /home/ubuntu/elk_credentials.txt
+    mode: '0600'
+    owner: ubuntu
+  when:
+    - elastic_password is defined
+    - kibana_token is defined
+
+- name: Print stack status
+  debug:
+    msg: |
+      Stack deployed successfully!
+      Elasticsearch: https://{{ ansible_host }}:9200
+      Kibana: http://{{ ansible_host }}:5601
+      Elastic password: {{ elastic_password | default('existing/not changed') }}
+      Credentials saved to: /home/ubuntu/elk_credentials.txt
